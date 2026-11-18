@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "ReciclaSpot",
+    "slug": "reciclaspot",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/icon.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O ReciclaSpot usa sua localização para mostrar os ecopontos mais próximos de você."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "O ReciclaSpot usa a câmera para você fotografar e registrar seus descartes.",
+          "photosPermission": false,
+          "microphonePermission": false
+        }
+      ]
+    ]
+  }
+}
