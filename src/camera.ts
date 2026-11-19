@@ -1,10 +1,6 @@
 import { Alert, Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
-/**
- * Pede permissão e abre a câmera do celular.
- * Retorna o endereço (uri) da foto tirada, ou null se o usuário cancelar / negar.
- */
 export async function tirarFoto(): Promise<string | null> {
   const perm = await ImagePicker.requestCameraPermissionsAsync();
   if (!perm.granted) {

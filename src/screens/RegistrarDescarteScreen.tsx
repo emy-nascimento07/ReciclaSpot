@@ -1,18 +1,30 @@
-import { useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BackButton, Button, CategoryRow, Screen } from '../components/ui';
-import { colors, fonts, shadow } from '../theme';
-import { Categoria } from '../types';
-import { StackProps } from '../navigation/types';
-import { useUser } from '../context/UserContext';
-import { useEcopontos } from '../context/EcopontosContext';
-import { tirarFoto } from '../camera';
+import { useState } from "react";
+import {
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BackButton, Button, CategoryRow, Screen } from "../components/ui";
+import { colors, fonts, shadow } from "../theme";
+import { Categoria } from "../types";
+import { StackProps } from "../navigation/types";
+import { useUser } from "../context/UserContext";
+import { useEcopontos } from "../context/EcopontosContext";
+import { tirarFoto } from "../camera";
 
 const MARGEM = 20;
 
-export default function RegistrarDescarteScreen({ navigation, route }: StackProps<'RegistrarDescarte'>) {
+export default function RegistrarDescarteScreen({
+  navigation,
+  route,
+}: StackProps<"RegistrarDescarte">) {
   const { registrarDescarte } = useUser();
   const { ecopontos } = useEcopontos();
   const { width } = useWindowDimensions();
@@ -21,10 +33,14 @@ export default function RegistrarDescarteScreen({ navigation, route }: StackProp
   const [foto, setFoto] = useState(route.params.fotoUri);
   const [salvando, setSalvando] = useState(false);
   const [categoria, setCategoria] = useState<Categoria | null>(null);
-  const [ecopontoId, setEcopontoId] = useState<string | null>(ecopontos[0]?.id ?? null);
+  const [ecopontoId, setEcopontoId] = useState<string | null>(
+    ecopontos[0]?.id ?? null,
+  );
 
   // só mostra ecopontos que aceitam o material escolhido
-  const opcoes = categoria ? ecopontos.filter((e) => e.categoria === categoria) : ecopontos;
+  const opcoes = categoria
+    ? ecopontos.filter((e) => e.categoria === categoria)
+    : ecopontos;
   const ecoValido = opcoes.some((e) => e.id === ecopontoId) ? ecopontoId : null;
 
   const escolherCategoria = (c: Categoria) => {
@@ -41,48 +57,86 @@ export default function RegistrarDescarteScreen({ navigation, route }: StackProp
 
   const confirmar = async () => {
     if (salvando) return;
-    if (!categoria) return Alert.alert('Falta pouco', 'Escolha o tipo de material que você descartou.');
+    if (!categoria)
+      return Alert.alert(
+        "Falta pouco",
+        "Escolha o tipo de material que você descartou.",
+      );
     const eco = ecopontos.find((e) => e.id === ecoValido);
-    if (!eco) return Alert.alert('Falta pouco', 'Escolha o ecoponto onde você fez o descarte.');
+    if (!eco)
+      return Alert.alert(
+        "Falta pouco",
+        "Escolha o ecoponto onde você fez o descarte.",
+      );
     setSalvando(true);
-    await registrarDescarte({ fotoUri: foto, categoria, pontoId: eco.id, pontoNome: eco.nome });
+    await registrarDescarte({
+      fotoUri: foto,
+      categoria,
+      pontoId: eco.id,
+      pontoNome: eco.nome,
+    });
     setSalvando(false);
-    Alert.alert('Descarte registrado! 🌱', 'Obrigado por ajudar a transformar nossa cidade.', [
-      { text: 'OK', onPress: () => navigation.goBack() },
-    ]);
+    Alert.alert(
+      "Descarte registrado! 🌱",
+      "Obrigado por ajudar a transformar nossa cidade.",
+      [{ text: "OK", onPress: () => navigation.goBack() }],
+    );
   };
 
   const fotoW = width - MARGEM * 2;
 
   return (
-    <Screen edges={['top', 'right', 'left']}>
+    <Screen edges={["top", "right", "left"]}>
       <View style={s.header}>
         <BackButton inline />
         <Text style={s.headerTitle}>Registrar Descarte</Text>
         <View style={{ width: 34 }} />
       </View>
 
-      <ScrollView contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 32 }]}>
+      <ScrollView
+        contentContainerStyle={[
+          s.scroll,
+          { paddingBottom: insets.bottom + 32 },
+        ]}
+      >
         <View>
-          <Image source={{ uri: foto }} style={[s.foto, { width: fotoW, height: fotoW * 0.75 }]} />
+          <Image
+            source={{ uri: foto }}
+            style={[s.foto, { width: fotoW, height: fotoW * 0.75 }]}
+          />
           <Pressable style={s.refazer} onPress={refazer} hitSlop={8}>
-            <MaterialCommunityIcons name="camera-retake-outline" size={18} color={colors.black} />
+            <MaterialCommunityIcons
+              name="camera-retake-outline"
+              size={18}
+              color={colors.black}
+            />
             <Text style={s.refazerText}>Tirar outra</Text>
           </Pressable>
         </View>
 
         <Text style={s.section}>O que você descartou?</Text>
-        <CategoryRow selected={categoria ? [categoria] : []} onToggle={escolherCategoria} />
+        <CategoryRow
+          selected={categoria ? [categoria] : []}
+          onToggle={escolherCategoria}
+        />
 
         <Text style={s.section}>Em qual ecoponto?</Text>
-        {opcoes.length === 0 && <Text style={s.vazio}>Nenhum ecoponto próximo aceita esse material.</Text>}
+        {opcoes.length === 0 && (
+          <Text style={s.vazio}>
+            Nenhum ecoponto próximo aceita esse material.
+          </Text>
+        )}
         <View style={{ gap: 10 }}>
           {opcoes.map((e) => {
             const ativo = e.id === ecoValido;
             return (
-              <Pressable key={e.id} onPress={() => setEcopontoId(e.id)} style={[s.opcao, ativo && s.opcaoAtiva]}>
+              <Pressable
+                key={e.id}
+                onPress={() => setEcopontoId(e.id)}
+                style={[s.opcao, ativo && s.opcaoAtiva]}
+              >
                 <MaterialCommunityIcons
-                  name={ativo ? 'radiobox-marked' : 'radiobox-blank'}
+                  name={ativo ? "radiobox-marked" : "radiobox-blank"}
                   size={22}
                   color={ativo ? colors.green : colors.muted}
                 />
@@ -97,12 +151,21 @@ export default function RegistrarDescarteScreen({ navigation, route }: StackProp
           })}
         </View>
 
-        <View style={{ marginTop: 28 }}>
+        <View
+          style={{ marginTop: 28, opacity: salvando ? 0.6 : 1 }}
+          pointerEvents={salvando ? "none" : "auto"}
+        >
           <Button
-            title={salvando ? 'Salvando...' : 'Confirmar descarte'}
+            title={salvando ? "Salvando..." : "Confirmar descarte"}
             color={colors.green}
             onPress={confirmar}
-            icon={<MaterialCommunityIcons name="check-circle-outline" size={20} color={colors.black} />}
+            icon={
+              <MaterialCommunityIcons
+                name="check-circle-outline"
+                size={20}
+                color={colors.black}
+              />
+            }
           />
         </View>
       </ScrollView>
@@ -112,22 +175,26 @@ export default function RegistrarDescarteScreen({ navigation, route }: StackProp
 
 const s = StyleSheet.create({
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 10,
   },
-  headerTitle: { fontFamily: fonts.semibold, fontSize: 18, color: colors.black },
+  headerTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 18,
+    color: colors.black,
+  },
   scroll: { paddingHorizontal: MARGEM },
   foto: { borderRadius: 14, backgroundColor: colors.bgArc },
   refazer: {
-    position: 'absolute',
+    position: "absolute",
     right: 10,
     bottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     backgroundColor: colors.white,
     borderRadius: 20,
@@ -136,17 +203,23 @@ const s = StyleSheet.create({
     ...shadow,
   },
   refazerText: { fontFamily: fonts.medium, fontSize: 13, color: colors.black },
-  section: { fontFamily: fonts.semibold, fontSize: 17, color: colors.black, marginTop: 24, marginBottom: 14 },
+  section: {
+    fontFamily: fonts.semibold,
+    fontSize: 17,
+    color: colors.black,
+    marginTop: 24,
+    marginBottom: 14,
+  },
   vazio: { fontFamily: fonts.regular, fontSize: 14, color: colors.muted },
   opcao: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     backgroundColor: colors.white,
     borderRadius: 10,
     padding: 12,
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: "transparent",
     ...shadow,
   },
   opcaoAtiva: { borderColor: colors.green },

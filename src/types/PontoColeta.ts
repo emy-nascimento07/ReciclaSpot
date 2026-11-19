@@ -1,4 +1,3 @@
-/** Tipos de resíduo aceitos pelos pontos de coleta. */
 export type Categoria = 'Eletrônicos' | 'Óleo Usado' | 'Pilhas/Baterias' | 'Recicláveis Gerais' | 'Medicamentos';
 
 export interface PontoColeta {

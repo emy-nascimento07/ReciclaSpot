@@ -1,21 +1,28 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
 
-const CHAVE = 'reciclaspot:usuario:v2';
+export const CHAVE_USUARIO = 'reciclaspot:usuario:v2';
+export const CHAVE_FAVORITOS = '@reciclaspot:favoritos';
+export const CHAVE_ECOPONTOS = '@reciclaspot:ecopontos';
 
 /** Lê um valor salvo no celular (ou null se não existir / estiver corrompido). */
-export async function carregar<T>(): Promise<T | null> {
+export async function carregar<T>(chave: string = CHAVE_USUARIO): Promise<T | null> {
   try {
-    const json = await AsyncStorage.getItem(CHAVE);
+    const json = await AsyncStorage.getItem(chave);
     return json ? (JSON.parse(json) as T) : null;
   } catch {
     return null;
   }
 }
 
-export async function salvar(valor: unknown) {
+export async function salvar(valor: unknown, chave: string = CHAVE_USUARIO) {
   try {
-    await AsyncStorage.setItem(CHAVE, JSON.stringify(valor));
+    await AsyncStorage.setItem(chave, JSON.stringify(valor));
+
+    // Se estiver salvando o perfil completo, espelha também na chave literal exigida pelo requisito
+    if (chave === CHAVE_USUARIO && valor && typeof valor === 'object' && 'favoritos' in valor) {
+      await AsyncStorage.setItem(CHAVE_FAVORITOS, JSON.stringify((valor as { favoritos: unknown }).favoritos));
+    }
   } catch {
     // sem espaço / erro de escrita: o app continua funcionando só em memória
   }
