@@ -1,44 +1,45 @@
 import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
-import { Role } from '../theme';
-import { Category } from '../data';
+import { Descarte, Role, Usuario } from '../types';
 import { apagarFoto, carregar, guardarFoto, salvar } from '../storage';
 
-export type Descarte = {
-  id: string;
-  fotoUri: string;
-  categoria: Category;
-  ecopontoId: string;
-  ecopontoNome: string;
-  /** data em formato ISO (texto), para poder salvar no celular */
-  data: string;
-};
-
-type User = {
-  nome: string;
+/** Estado salvo no celular: os dados cadastrais (Usuario) + o que o app precisa lembrar. */
+type Perfil = Usuario & {
   role: Role;
-  descartes: number;
   historico: Descarte[];
+  /** ids dos pontos de coleta salvos na aba Favoritos */
+  favoritos: string[];
 };
 
 type Ctx = {
-  user: User;
-  entrar: (role: Role, nome?: string) => void;
+  user: Perfil;
+  entrar: (role: Role, dados?: { nome?: string; email?: string }) => void;
   registrarDescarte: (d: Omit<Descarte, 'id' | 'data'>) => Promise<void>;
   removerDescarte: (id: string) => void;
+  ehFavorito: (pontoId: string) => boolean;
+  alternarFavorito: (pontoId: string) => void;
 };
 
-const inicial: User = { nome: 'Thiago Ramos', role: 'cidadao', descartes: 42, historico: [] };
+const inicial: Perfil = {
+  id: 'u1',
+  nome: 'Thiago Ramos',
+  email: 'thiago.ramos@email.com',
+  pontosReciclagem: 42,
+  fotoPerfilUri: null,
+  role: 'cidadao',
+  historico: [],
+  favoritos: [],
+};
 
 const UserContext = createContext<Ctx | null>(null);
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User>(inicial);
+  const [user, setUser] = useState<Perfil>(inicial);
   const pronto = useRef(false);
 
   // ao abrir o app: lê o que estava salvo
   useEffect(() => {
-    carregar<User>().then((salvo) => {
-      if (salvo) setUser({ ...inicial, ...salvo, historico: salvo.historico ?? [] });
+    carregar<Partial<Perfil>>().then((salvo) => {
+      if (salvo) setUser({ ...inicial, ...salvo });
       pronto.current = true;
     });
   }, []);
@@ -48,15 +49,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (pronto.current) salvar(user);
   }, [user]);
 
-  const entrar = (role: Role, nome?: string) =>
-    setUser((u) => ({ ...u, role, nome: nome?.trim() ? nome.trim() : u.nome }));
+  const entrar = (role: Role, dados?: { nome?: string; email?: string }) =>
+    setUser((u) => ({
+      ...u,
+      role,
+      nome: dados?.nome?.trim() || u.nome,
+      email: dados?.email?.trim() || u.email,
+    }));
 
   const registrarDescarte = async (d: Omit<Descarte, 'id' | 'data'>) => {
     const id = String(Date.now());
     const fotoUri = await guardarFoto(d.fotoUri, id);
     setUser((u) => ({
       ...u,
-      descartes: u.descartes + 1,
+      pontosReciclagem: u.pontosReciclagem + 1,
       historico: [{ ...d, fotoUri, id, data: new Date().toISOString() }, ...u.historico],
     }));
   };
@@ -67,13 +73,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
     apagarFoto(alvo.fotoUri);
     setUser((u) => ({
       ...u,
-      descartes: Math.max(0, u.descartes - 1),
+      pontosReciclagem: Math.max(0, u.pontosReciclagem - 1),
       historico: u.historico.filter((h) => h.id !== id),
     }));
   };
 
+  const ehFavorito = (pontoId: string) => user.favoritos.includes(pontoId);
+
+  const alternarFavorito = (pontoId: string) =>
+    setUser((u) => ({
+      ...u,
+      favoritos: u.favoritos.includes(pontoId) ? u.favoritos.filter((f) => f !== pontoId) : [...u.favoritos, pontoId],
+    }));
+
   return (
-    <UserContext.Provider value={{ user, entrar, registrarDescarte, removerDescarte }}>
+    <UserContext.Provider value={{ user, entrar, registrarDescarte, removerDescarte, ehFavorito, alternarFavorito }}>
       {children}
     </UserContext.Provider>
   );

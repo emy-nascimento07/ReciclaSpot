@@ -8,12 +8,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EcoPin from '../components/EcoPin';
 import { Button, Tag } from '../components/ui';
 import { colors, fonts, shadow } from '../theme';
-import { categories, Category, Ecoponto } from '../data';
+import { PontoColetaComDistancia } from '../types';
 import { useEcopontos } from '../context/EcopontosContext';
 import { RootStackParamList } from '../navigation/types';
 
 const wordmark = require('../../assets/images/wordmark.png');
-const labelOf = (id: Category) => categories.find((c) => c.id === id)!.label;
 
 export default function MapaScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -22,14 +21,14 @@ export default function MapaScreen() {
   const { ecopontos, regiao, status, cidade } = useEcopontos();
   const [selId, setSelId] = useState<string | null>(null);
   const selecionado = ecopontos.find((e) => e.id === selId) ?? null;
-  const setSelecionado = (e: Ecoponto | null) => setSelId(e?.id ?? null);
+  const setSelecionado = (e: PontoColetaComDistancia | null) => setSelId(e?.id ?? null);
 
   // quando a localização chega, centraliza o mapa no usuário
   useEffect(() => {
     if (status === 'ok') mapRef.current?.animateToRegion(regiao, 600);
   }, [status, regiao]);
 
-  const selecionar = (e: Ecoponto) => {
+  const selecionar = (e: PontoColetaComDistancia) => {
     setSelecionado(e);
     mapRef.current?.animateToRegion(
       // desloca um pouco para baixo para o pino não ficar escondido atrás do card
@@ -92,13 +91,12 @@ export default function MapaScreen() {
           <View style={s.row}>
             <MaterialCommunityIcons name="map-marker-outline" size={20} color={colors.muted} />
             <Text style={s.cardText}>
-              {selecionado.distancia} · {selecionado.endereco}
+              {selecionado.distancia} · {selecionado.endereco} - {selecionado.bairro}
             </Text>
           </View>
           <View style={[s.row, { gap: 6, marginTop: 8 }]}>
-            {selecionado.aceita.map((c) => (
-              <Tag key={c} label={labelOf(c)} />
-            ))}
+            <Tag label={selecionado.categoria} />
+            {selecionado.aceitaEntulho && <Tag label="Aceita entulho" />}
           </View>
           <View style={{ marginTop: 14 }}>
             <Button

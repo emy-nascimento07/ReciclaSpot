@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Role } from '../theme';
+import { Role } from '../types';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -14,6 +14,7 @@ export type RootStackParamList = {
 export type MainTabParamList = {
   Explorar: undefined;
   Mapa: undefined;
+  Favoritos: undefined;
   Perfil: undefined;
 };
 

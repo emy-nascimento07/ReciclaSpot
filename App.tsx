@@ -26,7 +26,15 @@ import HomeScreen from './src/screens/HomeScreen';
 import EcopontoScreen from './src/screens/EcopontoScreen';
 import PerfilScreen from './src/screens/PerfilScreen';
 import MapaScreen from './src/screens/MapaScreen';
+import FavoritosScreen from './src/screens/FavoritosScreen';
 import RegistrarDescarteScreen from './src/screens/RegistrarDescarteScreen';
+
+const tabIcons: Record<keyof MainTabParamList, keyof typeof MaterialCommunityIcons.glyphMap> = {
+  Explorar: 'compass-outline',
+  Mapa: 'map-outline',
+  Favoritos: 'heart-outline',
+  Perfil: 'account-outline',
+};
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -47,9 +55,7 @@ function MainTabs() {
         tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 11 },
         tabBarIcon: ({ color, size }) => (
           <MaterialCommunityIcons
-            name={
-              route.name === 'Explorar' ? 'compass-outline' : route.name === 'Mapa' ? 'map-outline' : 'account-outline'
-            }
+            name={tabIcons[route.name]}
             size={size}
             color={color}
           />
@@ -58,6 +64,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Explorar" component={HomeScreen} />
       <Tab.Screen name="Mapa" component={MapaScreen} />
+      <Tab.Screen name="Favoritos" component={FavoritosScreen} />
       <Tab.Screen name="Perfil" component={PerfilScreen} />
     </Tab.Navigator>
   );

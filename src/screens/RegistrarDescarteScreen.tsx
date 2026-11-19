@@ -4,7 +4,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BackButton, Button, CategoryRow, Screen } from '../components/ui';
 import { colors, fonts, shadow } from '../theme';
-import { Category } from '../data';
+import { Categoria } from '../types';
 import { StackProps } from '../navigation/types';
 import { useUser } from '../context/UserContext';
 import { useEcopontos } from '../context/EcopontosContext';
@@ -20,17 +20,17 @@ export default function RegistrarDescarteScreen({ navigation, route }: StackProp
 
   const [foto, setFoto] = useState(route.params.fotoUri);
   const [salvando, setSalvando] = useState(false);
-  const [categoria, setCategoria] = useState<Category | null>(null);
+  const [categoria, setCategoria] = useState<Categoria | null>(null);
   const [ecopontoId, setEcopontoId] = useState<string | null>(ecopontos[0]?.id ?? null);
 
   // só mostra ecopontos que aceitam o material escolhido
-  const opcoes = categoria ? ecopontos.filter((e) => e.aceita.includes(categoria)) : ecopontos;
+  const opcoes = categoria ? ecopontos.filter((e) => e.categoria === categoria) : ecopontos;
   const ecoValido = opcoes.some((e) => e.id === ecopontoId) ? ecopontoId : null;
 
-  const escolherCategoria = (c: Category) => {
+  const escolherCategoria = (c: Categoria) => {
     setCategoria(c);
-    if (!ecopontos.find((e) => e.id === ecopontoId)?.aceita.includes(c)) {
-      setEcopontoId(ecopontos.find((e) => e.aceita.includes(c))?.id ?? null);
+    if (ecopontos.find((e) => e.id === ecopontoId)?.categoria !== c) {
+      setEcopontoId(ecopontos.find((e) => e.categoria === c)?.id ?? null);
     }
   };
 
@@ -45,7 +45,7 @@ export default function RegistrarDescarteScreen({ navigation, route }: StackProp
     const eco = ecopontos.find((e) => e.id === ecoValido);
     if (!eco) return Alert.alert('Falta pouco', 'Escolha o ecoponto onde você fez o descarte.');
     setSalvando(true);
-    await registrarDescarte({ fotoUri: foto, categoria, ecopontoId: eco.id, ecopontoNome: eco.nome });
+    await registrarDescarte({ fotoUri: foto, categoria, pontoId: eco.id, pontoNome: eco.nome });
     setSalvando(false);
     Alert.alert('Descarte registrado! 🌱', 'Obrigado por ajudar a transformar nossa cidade.', [
       { text: 'OK', onPress: () => navigation.goBack() },

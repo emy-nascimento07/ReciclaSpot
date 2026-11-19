@@ -6,7 +6,6 @@ import { useUser } from '../context/UserContext';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { categories } from '../data';
 import { tirarFoto } from '../camera';
 
 const avatar = require('../../assets/images/avatar.png');
@@ -36,9 +35,10 @@ export default function PerfilScreen() {
     <Screen edges={['top', 'right', 'left']}>
       <ScrollView contentContainerStyle={s.container}>
         <Logo size={100} />
-        <Image source={avatar} style={s.avatar} />
+        <Image source={user.fotoPerfilUri ? { uri: user.fotoPerfilUri } : avatar} style={s.avatar} />
         <Text style={s.name}>{user.nome}</Text>
         <Text style={s.role}>{roleInfo[user.role].title}</Text>
+        <Text style={s.email}>{user.email}</Text>
         <Pressable
           style={s.edit}
           hitSlop={8}
@@ -49,7 +49,7 @@ export default function PerfilScreen() {
         </Pressable>
 
         <View style={s.stat}>
-          <Text style={s.statNumber}>{user.descartes}</Text>
+          <Text style={s.statNumber}>{user.pontosReciclagem}</Text>
           <Text style={s.statLabel}>Descartes conscientes{'\n'}realizados</Text>
         </View>
 
@@ -75,9 +75,9 @@ export default function PerfilScreen() {
                 >
                   <Image source={{ uri: d.fotoUri }} style={s.thumb} />
                   <View style={{ flex: 1 }}>
-                    <Text style={s.itemTitle}>{categories.find((c) => c.id === d.categoria)?.label}</Text>
+                    <Text style={s.itemTitle}>{d.categoria}</Text>
                     <Text style={s.itemSub} numberOfLines={1}>
-                      {d.ecopontoNome} · {formatarData(d.data)}
+                      {d.pontoNome} · {formatarData(d.data)}
                     </Text>
                   </View>
                   <MaterialCommunityIcons name="check-decagram" size={22} color={colors.green} />
@@ -110,6 +110,7 @@ const s = StyleSheet.create({
   avatar: { width: 104, height: 104, borderRadius: 52, alignSelf: 'center', marginTop: 12 },
   name: { fontFamily: fonts.semibold, fontSize: 23, color: colors.black, textAlign: 'center', marginTop: 6 },
   role: { fontFamily: fonts.regular, fontSize: 16, color: colors.green, textAlign: 'center', lineHeight: 22 },
+  email: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, textAlign: 'center', marginTop: 2 },
   edit: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 4 },
   editText: { fontFamily: fonts.regular, fontStyle: 'italic', fontSize: 14, color: colors.muted },
   stat: {

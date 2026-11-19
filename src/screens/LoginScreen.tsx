@@ -17,7 +17,7 @@ export default function LoginScreen({ navigation, route }: StackProps<'Login'>) 
       Alert.alert('Atenção', 'Preencha e-mail e senha para continuar.');
       return;
     }
-    entrar(role);
+    entrar(role, { email });
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   };
 

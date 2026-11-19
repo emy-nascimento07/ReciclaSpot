@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
 
-const CHAVE = 'reciclaspot:usuario:v1';
+const CHAVE = 'reciclaspot:usuario:v2';
 
 /** Lê um valor salvo no celular (ou null se não existir / estiver corrompido). */
 export async function carregar<T>(): Promise<T | null> {

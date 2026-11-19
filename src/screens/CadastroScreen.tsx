@@ -18,7 +18,7 @@ export default function CadastroScreen({ navigation, route }: StackProps<'Cadast
       Alert.alert('Atenção', 'Preencha todos os campos para criar sua conta.');
       return;
     }
-    entrar(role, usuario);
+    entrar(role, { nome: usuario, email });
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   };
 

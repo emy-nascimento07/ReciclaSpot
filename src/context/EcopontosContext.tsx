@@ -1,15 +1,8 @@
 import { createContext, ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import * as Location from 'expo-location';
-import {
-  Coords,
-  deslocar,
-  distanciaKm,
-  Ecoponto,
-  EcopontoBase,
-  ecopontosBase,
-  formatarKm,
-  regiaoPadrao,
-} from '../data';
+import { Coords, PontoColeta, PontoColetaComDistancia, Regiao } from '../types';
+import { mockPontos, regiaoPadrao } from '../services/mockPontos';
+import { distanciaKm, formatarKm, transladar } from '../services/geo';
 
 export type StatusLocalizacao = 'parado' | 'carregando' | 'ok' | 'negado' | 'erro';
 
@@ -17,27 +10,26 @@ type Ctx = {
   status: StatusLocalizacao;
   usuario: Coords | null;
   cidade: string | null;
-  ecopontos: Ecoponto[];
-  regiao: typeof regiaoPadrao;
+  ecopontos: PontoColetaComDistancia[];
+  regiao: Regiao;
   /** Pede permissão e busca a localização (chamado ao entrar no app). */
   iniciar: () => void;
 };
 
 const EcopontosContext = createContext<Ctx | null>(null);
 
-/** Monta "Rua X, 123 - Bairro" a partir da geocodificação reversa. */
+/** Extrai rua/número e bairro da geocodificação reversa. */
 function formatarEndereco(a: Location.LocationGeocodedAddress, numeroPadrao: string) {
   const rua = a.street ?? a.name;
   if (!rua) return null;
-  const bairro = a.district ?? a.subregion ?? a.city;
-  return `${rua}, ${a.streetNumber ?? numeroPadrao}${bairro ? ` - ${bairro}` : ''}`;
+  return { endereco: `${rua}, ${a.streetNumber ?? numeroPadrao}`, bairro: a.district ?? a.subregion ?? a.city ?? null };
 }
 
 export function EcopontosProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<StatusLocalizacao>('parado');
   const [usuario, setUsuario] = useState<Coords | null>(null);
   const [cidade, setCidade] = useState<string | null>(null);
-  const [bases, setBases] = useState<EcopontoBase[]>(ecopontosBase);
+  const [pontos, setPontos] = useState<PontoColeta[]>(mockPontos);
   const iniciado = useRef(false);
 
   const iniciar = useCallback(async () => {
@@ -56,9 +48,9 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
       const eu = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
       setUsuario(eu);
 
-      // ecopontos posicionados ao redor do usuário
-      const perto = ecopontosBase.map((b) => ({ ...b, ...deslocar(eu, b.norteKm, b.lesteKm) }));
-      setBases(perto);
+      // ecopontos de exemplo reposicionados ao redor do usuário (mesma distância/direção do centro de SP)
+      const perto = mockPontos.map((p) => ({ ...p, ...transladar(p, regiaoPadrao, eu) }));
+      setPontos(perto);
       setStatus('ok');
 
       // nomes reais das ruas e da cidade (se falhar, mantém os endereços de exemplo)
@@ -66,13 +58,18 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
         const [minha] = await Location.reverseGeocodeAsync(eu);
         if (minha) setCidade(minha.city ?? minha.subregion ?? null);
         const enderecos = await Promise.all(
-          perto.map((b) =>
-            Location.reverseGeocodeAsync(b)
-              .then(([a]) => (a ? formatarEndereco(a, b.endereco.match(/\d+/)?.[0] ?? '100') : null))
+          perto.map((p) =>
+            Location.reverseGeocodeAsync(p)
+              .then(([a]) => (a ? formatarEndereco(a, p.endereco.match(/\d+/)?.[0] ?? '100') : null))
               .catch(() => null),
           ),
         );
-        setBases(perto.map((b, i) => ({ ...b, endereco: enderecos[i] ?? b.endereco })));
+        setPontos(
+          perto.map((p, i) => {
+            const e = enderecos[i];
+            return e ? { ...p, endereco: e.endereco, bairro: e.bairro ?? p.bairro } : p;
+          }),
+        );
       } catch {
         // geocodificação indisponível: segue com os endereços de exemplo
       }
@@ -81,18 +78,18 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const ecopontos = useMemo<Ecoponto[]>(() => {
+  const ecopontos = useMemo<PontoColetaComDistancia[]>(() => {
     const ref = usuario ?? regiaoPadrao;
-    return bases
-      .map((b) => {
-        const km = distanciaKm(ref, b);
-        return { ...b, distanciaKm: km, distancia: formatarKm(km) };
+    return pontos
+      .map((p) => {
+        const km = distanciaKm(ref, p);
+        return { ...p, distanciaKm: km, distancia: formatarKm(km) };
       })
       .sort((a, b) => a.distanciaKm - b.distanciaKm);
-  }, [bases, usuario]);
+  }, [pontos, usuario]);
 
-  const regiao = useMemo(
-    () => (usuario ? { ...usuario, latitudeDelta: 0.11, longitudeDelta: 0.11 } : regiaoPadrao),
+  const regiao = useMemo<Regiao>(
+    () => (usuario ? { ...usuario, latitudeDelta: 0.12, longitudeDelta: 0.12 } : regiaoPadrao),
     [usuario],
   );
 

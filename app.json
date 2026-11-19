@@ -34,7 +34,8 @@
           "photosPermission": false,
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }

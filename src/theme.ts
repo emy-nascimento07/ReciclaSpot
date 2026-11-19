@@ -19,7 +19,8 @@ export const fonts = {
   bold: 'Poppins_700Bold',
 };
 
-export type Role = 'cidadao' | 'voluntario';
+import { Role } from './types';
+export type { Role };
 
 export const roleInfo: Record<Role, { label: string; color: string; title: string }> = {
   cidadao: { label: 'Cidadão', color: colors.green, title: 'Cidadão Consciente' },
