@@ -13,13 +13,22 @@ import { apagarFoto, carregar, guardarFoto, salvar } from "../storage";
 type Perfil = Usuario & {
   role: Role;
   historico: Descarte[];
-  /** ids dos pontos de coleta salvos na aba Favoritos */
   favoritos: string[];
+};
+
+type EstadoContas = {
+  roleAtivo: Role;
+  perfis: Record<Role, Perfil>;
 };
 
 type Ctx = {
   user: Perfil;
   entrar: (role: Role, dados?: { nome?: string; email?: string }) => void;
+  atualizarPerfil: (dados: {
+    nome: string;
+    email: string;
+    role: Role;
+  }) => void;
   atualizarFotoPerfil: (tempUri: string) => Promise<void>;
   registrarDescarte: (d: Omit<Descarte, "id" | "data">) => Promise<void>;
   removerDescarte: (id: string) => void;
@@ -27,103 +36,226 @@ type Ctx = {
   alternarFavorito: (pontoId: string) => void;
 };
 
-const inicial: Perfil = {
-  id: "u1",
-  nome: "Thiago Ramos",
-  email: "thiago.ramos@email.com",
-  pontosReciclagem: 42,
-  fotoPerfilUri: null,
-  role: "cidadao",
-  historico: [],
-  favoritos: [],
+const perfisIniciais: Record<Role, Perfil> = {
+  cidadao: {
+    id: "u_cidadao",
+    nome: "Thiago Ramos",
+    email: "thiago.ramos@email.com",
+    pontosReciclagem: 42,
+    fotoPerfilUri: null,
+    role: "cidadao",
+    historico: [],
+    favoritos: [],
+  },
+  voluntario: {
+    id: "u_voluntario",
+    nome: "Voluntário Eco",
+    email: "voluntario@email.com",
+    pontosReciclagem: 0,
+    fotoPerfilUri: null,
+    role: "voluntario",
+    historico: [],
+    favoritos: [],
+  },
+};
+
+const estadoInicial: EstadoContas = {
+  roleAtivo: "cidadao",
+  perfis: perfisIniciais,
 };
 
 const UserContext = createContext<Ctx | null>(null);
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Perfil>(inicial);
+  const [estado, setEstado] = useState<EstadoContas>(estadoInicial);
   const pronto = useRef(false);
 
-  // ao abrir o app: lê o que estava salvo
-  // Substitua o primeiro useEffect do UserContext.tsx por este:
+  const user = estado.perfis[estado.roleAtivo];
+
+  // Carrega os perfis salvos ao abrir o app
   useEffect(() => {
-    Promise.all([
-      carregar<Partial<Perfil>>(),
-      carregar<string[]>("@reciclaspot:favoritos"),
-    ]).then(([salvo, favsSalvos]) => {
-      if (salvo || favsSalvos) {
-        setUser({
-          ...inicial,
-          ...salvo,
-          favoritos: favsSalvos ?? salvo?.favoritos ?? [],
-        });
+    carregar<Partial<EstadoContas> & Partial<Perfil>>().then((salvo) => {
+      if (salvo) {
+        if (salvo.perfis) {
+          setEstado({
+            roleAtivo: salvo.roleAtivo ?? "cidadao",
+            perfis: {
+              cidadao: {
+                ...perfisIniciais.cidadao,
+                ...salvo.perfis.cidadao,
+                role: "cidadao",
+              },
+              voluntario: {
+                ...perfisIniciais.voluntario,
+                ...salvo.perfis.voluntario,
+                role: "voluntario",
+              },
+            },
+          });
+        } else {
+          // Migra caso exista dado antigo no formato único
+          const roleAntigo: Role = salvo.role ?? "cidadao";
+          setEstado({
+            roleAtivo: roleAntigo,
+            perfis: {
+              ...perfisIniciais,
+              [roleAntigo]: {
+                ...perfisIniciais[roleAntigo],
+                ...salvo,
+                role: roleAntigo,
+              },
+            },
+          });
+        }
       }
       pronto.current = true;
     });
   }, []);
 
-  // sempre que o usuário mudar: salva (só depois de ter lido, para não sobrescrever com o valor inicial)
+  // Salva sempre que qualquer perfil mudar
   useEffect(() => {
-    if (pronto.current) salvar(user);
-  }, [user]);
+    if (pronto.current) salvar(estado);
+  }, [estado]);
 
   const entrar = (role: Role, dados?: { nome?: string; email?: string }) =>
-    setUser((u) => ({
-      ...u,
-      role,
-      nome: dados?.nome?.trim() || u.nome,
-      email: dados?.email?.trim() || u.email,
-    }));
+    setEstado((prev) => {
+      const atual = prev.perfis[role];
+      return {
+        roleAtivo: role,
+        perfis: {
+          ...prev.perfis,
+          [role]: {
+            ...atual,
+            role,
+            nome: dados?.nome?.trim() || atual.nome,
+            email: dados?.email?.trim() || atual.email,
+          },
+        },
+      };
+    });
+
+  const atualizarPerfil = (dados: {
+    nome: string;
+    email: string;
+    role: Role;
+  }) => {
+    setEstado((prev) => {
+      const alvo = prev.perfis[dados.role];
+      return {
+        roleAtivo: dados.role,
+        perfis: {
+          ...prev.perfis,
+          [dados.role]: {
+            ...alvo,
+            nome: dados.nome,
+            email: dados.email,
+            role: dados.role,
+          },
+        },
+      };
+    });
+  };
 
   const atualizarFotoPerfil = async (tempUri: string) => {
-    // Apaga a foto anterior do armazenamento permanente, se existir
-    if (user.fotoPerfilUri) {
-      apagarFoto(user.fotoPerfilUri);
+    const roleAtual = estado.roleAtivo;
+    const fotoAnterior = estado.perfis[roleAtual].fotoPerfilUri;
+
+    if (fotoAnterior) {
+      apagarFoto(fotoAnterior);
     }
-    // Copia a nova foto do cache temporário da câmera para o diretório permanente do app
-    const fotoUri = await guardarFoto(tempUri, `perfil_${Date.now()}`);
-    setUser((u) => ({ ...u, fotoPerfilUri: fotoUri }));
+
+    const fotoUri = await guardarFoto(
+      tempUri,
+      `perfil_${roleAtual}_${Date.now()}`,
+    );
+
+    setEstado((prev) => ({
+      ...prev,
+      perfis: {
+        ...prev.perfis,
+        [roleAtual]: {
+          ...prev.perfis[roleAtual],
+          fotoPerfilUri: fotoUri,
+        },
+      },
+    }));
   };
 
   const registrarDescarte = async (d: Omit<Descarte, "id" | "data">) => {
+    const roleAtual = estado.roleAtivo;
     const id = String(Date.now());
     const fotoUri = await guardarFoto(d.fotoUri, id);
-    setUser((u) => ({
-      ...u,
-      pontosReciclagem: u.pontosReciclagem + 1,
-      historico: [
-        { ...d, fotoUri, id, data: new Date().toISOString() },
-        ...u.historico,
-      ],
-    }));
+
+    setEstado((prev) => {
+      const atual = prev.perfis[roleAtual];
+      return {
+        ...prev,
+        perfis: {
+          ...prev.perfis,
+          [roleAtual]: {
+            ...atual,
+            pontosReciclagem: atual.pontosReciclagem + 1,
+            historico: [
+              { ...d, fotoUri, id, data: new Date().toISOString() },
+              ...atual.historico,
+            ],
+          },
+        },
+      };
+    });
   };
 
   const removerDescarte = (id: string) => {
-    const alvo = user.historico.find((h) => h.id === id);
+    const roleAtual = estado.roleAtivo;
+    const atual = estado.perfis[roleAtual];
+    const alvo = atual.historico.find((h) => h.id === id);
     if (!alvo) return;
+
     apagarFoto(alvo.fotoUri);
-    setUser((u) => ({
-      ...u,
-      pontosReciclagem: Math.max(0, u.pontosReciclagem - 1),
-      historico: u.historico.filter((h) => h.id !== id),
-    }));
+
+    setEstado((prev) => {
+      const perfilAtual = prev.perfis[roleAtual];
+      return {
+        ...prev,
+        perfis: {
+          ...prev.perfis,
+          [roleAtual]: {
+            ...perfilAtual,
+            pontosReciclagem: Math.max(0, perfilAtual.pontosReciclagem - 1),
+            historico: perfilAtual.historico.filter((h) => h.id !== id),
+          },
+        },
+      };
+    });
   };
 
   const ehFavorito = (pontoId: string) => user.favoritos.includes(pontoId);
 
-  const alternarFavorito = (pontoId: string) =>
-    setUser((u) => ({
-      ...u,
-      favoritos: u.favoritos.includes(pontoId)
-        ? u.favoritos.filter((f) => f !== pontoId)
-        : [...u.favoritos, pontoId],
-    }));
+  const alternarFavorito = (pontoId: string) => {
+    const roleAtual = estado.roleAtivo;
+    setEstado((prev) => {
+      const atual = prev.perfis[roleAtual];
+      return {
+        ...prev,
+        perfis: {
+          ...prev.perfis,
+          [roleAtual]: {
+            ...atual,
+            favoritos: atual.favoritos.includes(pontoId)
+              ? atual.favoritos.filter((f) => f !== pontoId)
+              : [...atual.favoritos, pontoId],
+          },
+        },
+      };
+    });
+  };
 
   return (
     <UserContext.Provider
       value={{
         user,
         entrar,
+        atualizarPerfil,
         atualizarFotoPerfil,
         registrarDescarte,
         removerDescarte,

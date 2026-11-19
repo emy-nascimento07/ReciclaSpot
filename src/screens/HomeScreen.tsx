@@ -1,19 +1,25 @@
 import { useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BackButton, CategoryRow, Logo, PontoCard, Screen } from '../components/ui';
-import { colors, fonts } from '../theme';
+import NovoPontoModal from '../components/NovoPontoModal';
+import { colors, fonts, shadow } from '../theme';
 import { Categoria } from '../types';
 import { useEcopontos } from '../context/EcopontosContext';
+import { useUser } from '../context/UserContext';
 import { RootStackParamList } from '../navigation/types';
 
 export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { ecopontos, status, cidade } = useEcopontos();
+  const { user } = useUser();
   const [busca, setBusca] = useState('');
   const [filtros, setFiltros] = useState<Categoria[]>([]);
+  const [modalNovoAberto, setModalNovoAberto] = useState(false);
+
+  const isVoluntario = user.role === 'voluntario';
 
   const toggle = (c: Categoria) => setFiltros((f) => (f.includes(c) ? f.filter((x) => x !== c) : [...f, c]));
 
@@ -70,6 +76,12 @@ export default function HomeScreen() {
                 <Text style={[s.avisoText, status === 'ok' && { color: colors.greenDark }]}>{avisoLocal}</Text>
               </View>
             )}
+            {isVoluntario && (
+              <Pressable style={s.novoPontoBtn} onPress={() => setModalNovoAberto(true)}>
+                <MaterialCommunityIcons name="plus-circle-outline" size={20} color={colors.black} />
+                <Text style={s.novoPontoText}>Cadastrar Novo Ponto de Coleta</Text>
+              </Pressable>
+            )}
             <View style={{ marginTop: 12 }}>
               <CategoryRow selected={filtros} onToggle={toggle} />
             </View>
@@ -79,6 +91,11 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <PontoCard ponto={item} onPress={() => navigation.navigate('Ecoponto', { id: item.id })} />
         )}
+      />
+
+      <NovoPontoModal
+        visible={modalNovoAberto}
+        onClose={() => setModalNovoAberto(false)}
       />
     </Screen>
   );
@@ -98,6 +115,22 @@ const s = StyleSheet.create({
   },
   aviso: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingHorizontal: 4 },
   avisoText: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, flexShrink: 1 },
+  novoPontoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.green,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 12,
+    ...shadow,
+  },
+  novoPontoText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.black,
+  },
   searchInput: { flex: 1, fontFamily: fonts.regular, fontSize: 16, color: colors.text, paddingVertical: 0 },
   empty: { fontFamily: fonts.regular, fontSize: 14, color: colors.muted, textAlign: 'center', marginTop: 20 },
 });

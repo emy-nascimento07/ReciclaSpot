@@ -9,10 +9,16 @@ import {
   useState,
 } from "react";
 import * as Location from "expo-location";
-import { Coords, PontoColeta, PontoColetaComDistancia, Regiao } from "../types";
+import {
+  Categoria,
+  Coords,
+  PontoColeta,
+  PontoColetaComDistancia,
+  Regiao,
+} from "../types";
 import { mockPontos, regiaoPadrao } from "../services/mockPontos";
 import { distanciaKm, formatarKm, transladar } from "../services/geo";
-import { carregar, CHAVE_ECOPONTOS, salvar } from "../storage";
+import { carregar, CHAVE_ECOPONTOS, guardarFoto, salvar } from "../storage";
 
 export type StatusLocalizacao =
   | "parado"
@@ -27,19 +33,33 @@ type CacheEcopontos = {
   cidade: string | null;
 };
 
+export type NovoPontoInput = {
+  nome: string;
+  categoria: Categoria;
+  endereco: string;
+  bairro: string;
+  horarioFuncionamento: string;
+  latitude: number;
+  longitude: number;
+  imagemUri?: string | null;
+  telefoneContato: string;
+  aceitaEntulho: boolean;
+};
+
 type Ctx = {
   status: StatusLocalizacao;
   usuario: Coords | null;
   cidade: string | null;
   ecopontos: PontoColetaComDistancia[];
   regiao: Regiao;
-  /** Pede permissão e busca a localização (chamado ao entrar no app). */
   iniciar: () => void;
+  adicionarPonto: (dados: NovoPontoInput) => Promise<PontoColeta>;
 };
+
+const CHAVE_PONTOS_CRIADOS = "@reciclaspot:pontos_criados";
 
 const EcopontosContext = createContext<Ctx | null>(null);
 
-/** Extrai rua/número e bairro da geocodificação reversa. */
 function formatarEndereco(
   a: Location.LocationGeocodedAddress,
   numeroPadrao: string,
@@ -57,15 +77,23 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Coords | null>(null);
   const [cidade, setCidade] = useState<string | null>(null);
   const [pontos, setPontos] = useState<PontoColeta[]>(mockPontos);
+  const [pontosCriados, setPontosCriados] = useState<PontoColeta[]>([]);
   const iniciado = useRef(false);
 
-  // Carrega o cache offline assim que o aplicativo abre (garante funcionamento em Modo Avião)
+  // Carrega cache offline e pontos criados por voluntários
   useEffect(() => {
-    carregar<CacheEcopontos>(CHAVE_ECOPONTOS).then((cache) => {
-      if (!cache) return;
-      if (cache.pontos?.length) setPontos(cache.pontos);
-      if (cache.usuario) setUsuario(cache.usuario);
-      if (cache.cidade) setCidade(cache.cidade);
+    Promise.all([
+      carregar<CacheEcopontos>(CHAVE_ECOPONTOS),
+      carregar<PontoColeta[]>(CHAVE_PONTOS_CRIADOS),
+    ]).then(([cache, criados]) => {
+      if (cache) {
+        if (cache.pontos?.length) setPontos(cache.pontos);
+        if (cache.usuario) setUsuario(cache.usuario);
+        if (cache.cidade) setCidade(cache.cidade);
+      }
+      if (criados?.length) {
+        setPontosCriados(criados);
+      }
     });
   }, []);
 
@@ -74,11 +102,9 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
     iniciado.current = true;
     setStatus("carregando");
 
-    // Função auxiliar para atualizar mapa, ecopontos, nomes das ruas e salvar no cache offline
     const aplicarPosicao = async (eu: Coords) => {
       setUsuario(eu);
 
-      // ecopontos de exemplo reposicionados ao redor do usuário
       const perto = mockPontos.map((p) => ({
         ...p,
         ...transladar(p, regiaoPadrao, eu),
@@ -89,7 +115,6 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
       let cidadeAtual: string | null = null;
       let pontosFinais: PontoColeta[] = perto;
 
-      // nomes reais das ruas e da cidade (se falhar por estar sem internet, mantém os endereços anteriores)
       try {
         const [minha] = await Location.reverseGeocodeAsync(eu);
         if (minha) {
@@ -115,10 +140,9 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
         });
         setPontos(pontosFinais);
       } catch {
-        // geocodificação indisponível (ex: Modo Avião)
+        // geocodificação indisponível
       }
 
-      // Persiste os dados atualizados localmente para futuras aberturas offline
       await salvar(
         { pontos: pontosFinais, usuario: eu, cidade: cidadeAtual },
         CHAVE_ECOPONTOS,
@@ -133,7 +157,6 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // 1ª etapa: se houver posição em cache, exibe imediatamente sem fazer o usuário esperar
       const ultima = await Location.getLastKnownPositionAsync();
       const coordsUltima = ultima
         ? {
@@ -146,7 +169,6 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
         await aplicarPosicao(coordsUltima);
       }
 
-      // 2ª etapa: captura sempre as coordenadas exatas atuais
       const posAtual = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
@@ -155,25 +177,57 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
         longitude: posAtual.coords.longitude,
       };
 
-      // Atualiza novamente apenas se não havia cache ou se o usuário se moveu mais de 50 metros
       if (!coordsUltima || distanciaKm(coordsUltima, coordsAtuais) > 0.05) {
         await aplicarPosicao(coordsAtuais);
       }
     } catch {
-      // Só marca como erro se nem o cache chegou a funcionar
       setStatus((atual) => (atual === "ok" ? "ok" : "erro"));
     }
   }, []);
 
+  const adicionarPonto = async (dados: NovoPontoInput): Promise<PontoColeta> => {
+    const id = `custom_${Date.now()}`;
+    let imagemFinal = mockPontos[0]?.imagemUri ?? "";
+
+    if (dados.imagemUri) {
+      imagemFinal = await guardarFoto(dados.imagemUri, id);
+    }
+
+    const novoPonto: PontoColeta = {
+      id,
+      nome: dados.nome.trim(),
+      categoria: dados.categoria,
+      endereco: dados.endereco.trim(),
+      bairro: dados.bairro.trim(),
+      horarioFuncionamento:
+        dados.horarioFuncionamento.trim() || "Seg a Sex, 08h às 17h",
+      latitude: dados.latitude,
+      longitude: dados.longitude,
+      imagemUri: imagemFinal,
+      telefoneContato: dados.telefoneContato.trim() || "Não informado",
+      aceitaEntulho: dados.aceitaEntulho,
+    };
+
+    setPontosCriados((prev) => {
+      const atualizados = [novoPonto, ...prev];
+      salvar(atualizados, CHAVE_PONTOS_CRIADOS);
+      return atualizados;
+    });
+
+    return novoPonto;
+  };
+
   const ecopontos = useMemo<PontoColetaComDistancia[]>(() => {
     const ref = usuario ?? regiaoPadrao;
-    return pontos
+    const todos = [...pontosCriados, ...pontos];
+
+    return todos
       .map((p) => {
         const km = distanciaKm(ref, p);
         return { ...p, distanciaKm: km, distancia: formatarKm(km) };
       })
       .sort((a, b) => a.distanciaKm - b.distanciaKm);
-  }, [pontos, usuario]);
+  }, [pontos, pontosCriados, usuario]);
 
   const regiao = useMemo<Regiao>(
     () =>
@@ -185,7 +239,15 @@ export function EcopontosProvider({ children }: { children: ReactNode }) {
 
   return (
     <EcopontosContext.Provider
-      value={{ status, usuario, cidade, ecopontos, regiao, iniciar }}
+      value={{
+        status,
+        usuario,
+        cidade,
+        ecopontos,
+        regiao,
+        iniciar,
+        adicionarPonto,
+      }}
     >
       {children}
     </EcopontosContext.Provider>

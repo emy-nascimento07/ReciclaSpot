@@ -6,10 +6,12 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EcoPin from "../components/EcoPin";
+import NovoPontoModal from "../components/NovoPontoModal";
 import { Tag } from "../components/ui";
 import { colors, fonts, shadow } from "../theme";
-import { PontoColetaComDistancia } from "../types";
+import { Coords, PontoColetaComDistancia } from "../types";
 import { useEcopontos } from "../context/EcopontosContext";
+import { useUser } from "../context/UserContext";
 import { RootStackParamList } from "../navigation/types";
 
 const wordmark = require("../../assets/images/wordmark.png");
@@ -20,7 +22,13 @@ export default function MapaScreen() {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const { ecopontos, regiao, status, cidade } = useEcopontos();
+  const { user } = useUser();
+
+  const isVoluntario = user.role === "voluntario";
+
   const [selId, setSelId] = useState<string | null>(null);
+  const [modalNovoAberto, setModalNovoAberto] = useState(false);
+  const [coordNovoPonto, setCoordNovoPonto] = useState<Coords | null>(null);
 
   useEffect(() => {
     if (status === "ok") mapRef.current?.animateToRegion(regiao, 600);
@@ -44,6 +52,11 @@ export default function MapaScreen() {
     mapRef.current?.animateToRegion(regiao, 400);
   };
 
+  const abrirCriarPonto = (coord?: Coords) => {
+    setCoordNovoPonto(coord ?? null);
+    setModalNovoAberto(true);
+  };
+
   return (
     <View style={s.container}>
       <MapView
@@ -54,6 +67,11 @@ export default function MapaScreen() {
         showsMyLocationButton={false}
         onPress={(ev) => {
           if (ev.nativeEvent.action !== "marker-press") setSelId(null);
+        }}
+        onLongPress={(ev) => {
+          if (isVoluntario) {
+            abrirCriarPonto(ev.nativeEvent.coordinate);
+          }
         }}
         showsPointsOfInterests={false}
         toolbarEnabled={false}
@@ -114,6 +132,11 @@ export default function MapaScreen() {
               ? `${ecopontos.length} ecopontos perto de você${cidade ? ` em ${cidade}` : ""}`
               : "Localização desativada · pontos de exemplo"}
         </Text>
+        {isVoluntario && (
+          <Text style={s.voluntarioDica}>
+            Segure no mapa ou toque em "+ Novo Ponto" para cadastrar
+          </Text>
+        )}
       </View>
 
       <Pressable
@@ -127,6 +150,27 @@ export default function MapaScreen() {
           color={colors.black}
         />
       </Pressable>
+
+      {isVoluntario && (
+        <Pressable
+          style={s.fabNovoPonto}
+          onPress={() => abrirCriarPonto()}
+          accessibilityLabel="Cadastrar novo ponto de coleta"
+        >
+          <MaterialCommunityIcons
+            name="plus"
+            size={22}
+            color={colors.black}
+          />
+          <Text style={s.fabNovoPontoText}>Novo Ponto</Text>
+        </Pressable>
+      )}
+
+      <NovoPontoModal
+        visible={modalNovoAberto}
+        coordenadaInicial={coordNovoPonto}
+        onClose={() => setModalNovoAberto(false)}
+      />
     </View>
   );
 }
@@ -150,6 +194,12 @@ const s = StyleSheet.create({
     color: colors.muted,
     marginTop: 4,
   },
+  voluntarioDica: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.greenDark,
+    marginTop: 4,
+  },
   fab: {
     position: "absolute",
     right: 16,
@@ -160,6 +210,24 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     ...shadow,
+  },
+  fabNovoPonto: {
+    position: "absolute",
+    right: 16,
+    bottom: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.green,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    borderRadius: 28,
+    ...shadow,
+  },
+  fabNovoPontoText: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.black,
   },
   calloutCard: {
     width: 260,
