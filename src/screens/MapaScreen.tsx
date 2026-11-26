@@ -1,5 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import MapView, { Callout, Marker } from "react-native-maps";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -7,21 +14,25 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EcoPin from "../components/EcoPin";
 import NovoPontoModal from "../components/NovoPontoModal";
-import { Tag } from "../components/ui";
+import { Button, Tag } from "../components/ui";
 import { colors, fonts, shadow } from "../theme";
 import { Coords, PontoColetaComDistancia } from "../types";
-import { useEcopontos } from "../context/EcopontosContext";
-import { useUser } from "../context/UserContext";
+import { useEcopontos } from "../hooks/useEcopontos";
+import { useUser } from "../hooks/useUser";
 import { RootStackParamList } from "../navigation/types";
 
 const wordmark = require("../../assets/images/wordmark.png");
+
+const CALLOUT_WIDTH = 260;
+const FAB_SIZE = 48;
+const FAB_RADIUS = FAB_SIZE / 2;
 
 export default function MapaScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
-  const { ecopontos, regiao, status, cidade } = useEcopontos();
+  const { ecopontos, regiao, status, cidade, recarregar } = useEcopontos();
   const { user } = useUser();
 
   const isVoluntario = user.role === "voluntario";
@@ -29,10 +40,25 @@ export default function MapaScreen() {
   const [selId, setSelId] = useState<string | null>(null);
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
   const [coordNovoPonto, setCoordNovoPonto] = useState<Coords | null>(null);
+  const [atualizando, setAtualizando] = useState(false);
+  const [erro, setErro] = useState(false);
 
   useEffect(() => {
     if (status === "ok") mapRef.current?.animateToRegion(regiao, 600);
   }, [status, regiao]);
+
+  const onRefresh = useCallback(async () => {
+    setAtualizando(true);
+    setErro(false);
+
+    try {
+      await recarregar();
+    } catch {
+      setErro(true);
+    } finally {
+      setAtualizando(false);
+    }
+  }, [recarregar]);
 
   const selecionar = (e: PontoColetaComDistancia) => {
     setSelId(e.id);
@@ -57,6 +83,35 @@ export default function MapaScreen() {
     setModalNovoAberto(true);
   };
 
+  const headerSub =
+    status === "carregando"
+      ? "Buscando sua localização..."
+      : status === "ok"
+        ? `${ecopontos.length} ecopontos perto de você${cidade ? ` em ${cidade}` : ""}`
+        : "Localização desativada · pontos de exemplo";
+
+  if (erro) {
+    return (
+      <View style={s.errorContainer}>
+        <MaterialCommunityIcons
+          name="wifi-off"
+          size={48}
+          color={colors.muted}
+        />
+        <Text style={s.errorText}>
+          Erro ao carregar dados. Verifique sua conexão
+        </Text>
+        <View style={s.errorButtonWrapper}>
+          <Button
+            title="Tentar Novamente"
+            color={colors.greenDark}
+            onPress={onRefresh}
+          />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={s.container}>
       <MapView
@@ -69,9 +124,7 @@ export default function MapaScreen() {
           if (ev.nativeEvent.action !== "marker-press") setSelId(null);
         }}
         onLongPress={(ev) => {
-          if (isVoluntario) {
-            abrirCriarPonto(ev.nativeEvent.coordinate);
-          }
+          if (isVoluntario) abrirCriarPonto(ev.nativeEvent.coordinate);
         }}
         showsPointsOfInterests={false}
         toolbarEnabled={false}
@@ -85,14 +138,12 @@ export default function MapaScreen() {
             tracksViewChanges={selId === e.id}
           >
             <EcoPin ativo={selId === e.id} />
-
             <Callout
               tooltip
               onPress={() => navigation.navigate("Ecoponto", { id: e.id })}
             >
               <View style={s.calloutCard}>
                 <Text style={s.cardTitle}>{e.nome}</Text>
-
                 <View style={s.row}>
                   <MaterialCommunityIcons
                     name="map-marker-outline"
@@ -103,12 +154,10 @@ export default function MapaScreen() {
                     {e.distancia} · {e.endereco} - {e.bairro}
                   </Text>
                 </View>
-
                 <View style={[s.row, { gap: 6, marginTop: 8 }]}>
                   <Tag label={e.categoria} />
                   {e.aceitaEntulho && <Tag label="Aceita entulho" />}
                 </View>
-
                 <View style={s.calloutBtn}>
                   <Text style={s.calloutBtnText}>Ver detalhes</Text>
                   <MaterialCommunityIcons
@@ -125,13 +174,7 @@ export default function MapaScreen() {
 
       <View style={[s.header, { top: insets.top + 8 }]}>
         <Image source={wordmark} style={s.wordmark} resizeMode="contain" />
-        <Text style={s.headerSub}>
-          {status === "carregando"
-            ? "Buscando sua localização..."
-            : status === "ok"
-              ? `${ecopontos.length} ecopontos perto de você${cidade ? ` em ${cidade}` : ""}`
-              : "Localização desativada · pontos de exemplo"}
-        </Text>
+        <Text style={s.headerSub}>{headerSub}</Text>
         {isVoluntario && (
           <Text style={s.voluntarioDica}>
             Segure no mapa ou toque em "+ Novo Ponto" para cadastrar
@@ -151,17 +194,30 @@ export default function MapaScreen() {
         />
       </Pressable>
 
+      <Pressable
+        style={[s.fab, { top: insets.top + 8 + FAB_SIZE + 10 }]}
+        onPress={onRefresh}
+        disabled={atualizando}
+        accessibilityLabel="Recarregar ecopontos"
+      >
+        {atualizando ? (
+          <ActivityIndicator size="small" color={colors.greenDark} />
+        ) : (
+          <MaterialCommunityIcons
+            name="refresh"
+            size={22}
+            color={colors.black}
+          />
+        )}
+      </Pressable>
+
       {isVoluntario && (
         <Pressable
           style={s.fabNovoPonto}
           onPress={() => abrirCriarPonto()}
           accessibilityLabel="Cadastrar novo ponto de coleta"
         >
-          <MaterialCommunityIcons
-            name="plus"
-            size={22}
-            color={colors.black}
-          />
+          <MaterialCommunityIcons name="plus" size={22} color={colors.black} />
           <Text style={s.fabNovoPontoText}>Novo Ponto</Text>
         </Pressable>
       )}
@@ -203,9 +259,9 @@ const s = StyleSheet.create({
   fab: {
     position: "absolute",
     right: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    borderRadius: FAB_RADIUS,
     backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
@@ -230,18 +286,14 @@ const s = StyleSheet.create({
     color: colors.black,
   },
   calloutCard: {
-    width: 260,
+    width: CALLOUT_WIDTH,
     backgroundColor: colors.white,
     borderRadius: 14,
     padding: 14,
     marginBottom: 6,
     ...shadow,
   },
-  cardTitle: {
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    color: colors.black,
-  },
+  cardTitle: { fontFamily: fonts.semibold, fontSize: 16, color: colors.black },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -270,5 +322,23 @@ const s = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 13,
     color: colors.white,
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  errorText: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    textAlign: "center",
+    color: colors.black,
+  },
+  errorButtonWrapper: {
+    marginTop: 8,
+    width: "100%",
   },
 });

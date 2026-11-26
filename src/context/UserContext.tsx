@@ -8,6 +8,11 @@ import {
 } from "react";
 import { Descarte, Role, Usuario } from "../types";
 import { apagarFoto, carregar, guardarFoto, salvar } from "../storage";
+import {
+  inserirDescarteDb,
+  listarDescartesDb,
+  removerDescarteDb,
+} from "../services/database";
 
 /** Estado salvo no celular: os dados cadastrais (Usuario) + o que o app precisa lembrar. */
 type Perfil = Usuario & {
@@ -72,9 +77,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const user = estado.perfis[estado.roleAtivo];
 
-  // Carrega os perfis salvos ao abrir o app
+  // Carrega os perfis salvos ao abrir o app (e histórico do SQLite)
   useEffect(() => {
-    carregar<Partial<EstadoContas> & Partial<Perfil>>().then((salvo) => {
+    Promise.all([
+      carregar<Partial<EstadoContas> & Partial<Perfil>>(),
+      listarDescartesDb("cidadao").catch(() => []),
+      listarDescartesDb("voluntario").catch(() => []),
+    ]).then(([salvo, descCidadao, descVoluntario]) => {
       if (salvo) {
         if (salvo.perfis) {
           setEstado({
@@ -84,11 +93,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 ...perfisIniciais.cidadao,
                 ...salvo.perfis.cidadao,
                 role: "cidadao",
+                historico: descCidadao.length
+                  ? descCidadao
+                  : salvo.perfis.cidadao?.historico ?? [],
               },
               voluntario: {
                 ...perfisIniciais.voluntario,
                 ...salvo.perfis.voluntario,
                 role: "voluntario",
+                historico: descVoluntario.length
+                  ? descVoluntario
+                  : salvo.perfis.voluntario?.historico ?? [],
               },
             },
           });
@@ -185,6 +200,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const roleAtual = estado.roleAtivo;
     const id = String(Date.now());
     const fotoUri = await guardarFoto(d.fotoUri, id);
+    const novoDescarte: Descarte = {
+      ...d,
+      fotoUri,
+      id,
+      data: new Date().toISOString(),
+    };
+
+    await inserirDescarteDb(novoDescarte, roleAtual).catch(() => {});
 
     setEstado((prev) => {
       const atual = prev.perfis[roleAtual];
@@ -195,10 +218,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           [roleAtual]: {
             ...atual,
             pontosReciclagem: atual.pontosReciclagem + 1,
-            historico: [
-              { ...d, fotoUri, id, data: new Date().toISOString() },
-              ...atual.historico,
-            ],
+            historico: [novoDescarte, ...atual.historico],
           },
         },
       };
@@ -212,6 +232,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (!alvo) return;
 
     apagarFoto(alvo.fotoUri);
+    removerDescarteDb(id).catch(() => {});
 
     setEstado((prev) => {
       const perfilAtual = prev.perfis[roleAtual];

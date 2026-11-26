@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Alert,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,18 +16,19 @@ import { BackButton, Button, CategoryRow, Screen } from "../components/ui";
 import { colors, fonts, shadow } from "../theme";
 import { Categoria } from "../types";
 import { StackProps } from "../navigation/types";
-import { useUser } from "../context/UserContext";
-import { useEcopontos } from "../context/EcopontosContext";
+import { useUser } from "../hooks/useUser";
+import { useEcopontos } from "../hooks/useEcopontos";
 import { tirarFoto } from "../camera";
 
 const MARGEM = 20;
+const FOTO_RATIO = 0.75;
 
 export default function RegistrarDescarteScreen({
   navigation,
   route,
 }: StackProps<"RegistrarDescarte">) {
   const { registrarDescarte } = useUser();
-  const { ecopontos } = useEcopontos();
+  const { ecopontos, recarregar } = useEcopontos();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -36,12 +38,26 @@ export default function RegistrarDescarteScreen({
   const [ecopontoId, setEcopontoId] = useState<string | null>(
     ecopontos[0]?.id ?? null,
   );
+  const [atualizando, setAtualizando] = useState(false);
+  const [erro, setErro] = useState(false);
 
-  // só mostra ecopontos que aceitam o material escolhido
   const opcoes = categoria
     ? ecopontos.filter((e) => e.categoria === categoria)
     : ecopontos;
   const ecoValido = opcoes.some((e) => e.id === ecopontoId) ? ecopontoId : null;
+
+  const onRefresh = useCallback(async () => {
+    setAtualizando(true);
+    setErro(false);
+
+    try {
+      await recarregar();
+    } catch {
+      setErro(true);
+    } finally {
+      setAtualizando(false);
+    }
+  }, [recarregar]);
 
   const escolherCategoria = (c: Categoria) => {
     setCategoria(c);
@@ -57,30 +73,42 @@ export default function RegistrarDescarteScreen({
 
   const confirmar = async () => {
     if (salvando) return;
-    if (!categoria)
-      return Alert.alert(
+    if (!categoria) {
+      Alert.alert(
         "Falta pouco",
         "Escolha o tipo de material que você descartou.",
       );
+      return;
+    }
     const eco = ecopontos.find((e) => e.id === ecoValido);
-    if (!eco)
-      return Alert.alert(
+    if (!eco) {
+      Alert.alert(
         "Falta pouco",
         "Escolha o ecoponto onde você fez o descarte.",
       );
+      return;
+    }
     setSalvando(true);
-    await registrarDescarte({
-      fotoUri: foto,
-      categoria,
-      pontoId: eco.id,
-      pontoNome: eco.nome,
-    });
-    setSalvando(false);
-    Alert.alert(
-      "Descarte registrado! 🌱",
-      "Obrigado por ajudar a transformar nossa cidade.",
-      [{ text: "OK", onPress: () => navigation.goBack() }],
-    );
+    try {
+      await registrarDescarte({
+        fotoUri: foto,
+        categoria,
+        pontoId: eco.id,
+        pontoNome: eco.nome,
+      });
+      Alert.alert(
+        "Descarte registrado! 🌱",
+        "Obrigado por ajudar a transformar nossa cidade.",
+        [{ text: "OK", onPress: () => navigation.goBack() }],
+      );
+    } catch {
+      Alert.alert(
+        "Erro",
+        "Não foi possível registrar o descarte. Tente novamente.",
+      );
+    } finally {
+      setSalvando(false);
+    }
   };
 
   const fotoW = width - MARGEM * 2;
@@ -93,82 +121,110 @@ export default function RegistrarDescarteScreen({
         <View style={{ width: 34 }} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={[
-          s.scroll,
-          { paddingBottom: insets.bottom + 32 },
-        ]}
-      >
-        <View>
-          <Image
-            source={{ uri: foto }}
-            style={[s.foto, { width: fotoW, height: fotoW * 0.75 }]}
+      {erro ? (
+        <View style={s.errorContainer}>
+          <MaterialCommunityIcons
+            name="wifi-off"
+            size={48}
+            color={colors.muted}
           />
-          <Pressable style={s.refazer} onPress={refazer} hitSlop={8}>
-            <MaterialCommunityIcons
-              name="camera-retake-outline"
-              size={18}
-              color={colors.black}
-            />
-            <Text style={s.refazerText}>Tirar outra</Text>
-          </Pressable>
-        </View>
-
-        <Text style={s.section}>O que você descartou?</Text>
-        <CategoryRow
-          selected={categoria ? [categoria] : []}
-          onToggle={escolherCategoria}
-        />
-
-        <Text style={s.section}>Em qual ecoponto?</Text>
-        {opcoes.length === 0 && (
-          <Text style={s.vazio}>
-            Nenhum ecoponto próximo aceita esse material.
+          <Text style={s.errorText}>
+            Erro ao carregar dados. Verifique sua conexão
           </Text>
-        )}
-        <View style={{ gap: 10 }}>
-          {opcoes.map((e) => {
-            const ativo = e.id === ecoValido;
-            return (
-              <Pressable
-                key={e.id}
-                onPress={() => setEcopontoId(e.id)}
-                style={[s.opcao, ativo && s.opcaoAtiva]}
-              >
-                <MaterialCommunityIcons
-                  name={ativo ? "radiobox-marked" : "radiobox-blank"}
-                  size={22}
-                  color={ativo ? colors.green : colors.muted}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={s.opcaoTitle}>{e.nome}</Text>
-                  <Text style={s.opcaoSub} numberOfLines={1}>
-                    {e.distancia} · {e.endereco}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
+          <View style={s.errorButtonWrapper}>
+            <Button
+              title="Tentar Novamente"
+              color={colors.greenDark}
+              onPress={onRefresh}
+            />
+          </View>
         </View>
-
-        <View
-          style={{ marginTop: 28, opacity: salvando ? 0.6 : 1 }}
-          pointerEvents={salvando ? "none" : "auto"}
+      ) : (
+        <ScrollView
+          contentContainerStyle={[
+            s.scroll,
+            { paddingBottom: insets.bottom + 32 },
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={atualizando}
+              onRefresh={onRefresh}
+              colors={[colors.greenDark]}
+              tintColor={colors.greenDark}
+            />
+          }
         >
-          <Button
-            title={salvando ? "Salvando..." : "Confirmar descarte"}
-            color={colors.green}
-            onPress={confirmar}
-            icon={
+          <View>
+            <Image
+              source={{ uri: foto }}
+              style={[s.foto, { width: fotoW, height: fotoW * FOTO_RATIO }]}
+            />
+            <Pressable style={s.refazer} onPress={refazer} hitSlop={8}>
               <MaterialCommunityIcons
-                name="check-circle-outline"
-                size={20}
+                name="camera-retake-outline"
+                size={18}
                 color={colors.black}
               />
-            }
+              <Text style={s.refazerText}>Tirar outra</Text>
+            </Pressable>
+          </View>
+
+          <Text style={s.section}>O que você descartou?</Text>
+          <CategoryRow
+            selected={categoria ? [categoria] : []}
+            onToggle={escolherCategoria}
           />
-        </View>
-      </ScrollView>
+
+          <Text style={s.section}>Em qual ecoponto?</Text>
+          {opcoes.length === 0 && (
+            <Text style={s.vazio}>
+              Nenhum ecoponto próximo aceita esse material.
+            </Text>
+          )}
+          <View style={{ gap: 10 }}>
+            {opcoes.map((e) => {
+              const ativo = e.id === ecoValido;
+              return (
+                <Pressable
+                  key={e.id}
+                  onPress={() => setEcopontoId(e.id)}
+                  style={[s.opcao, ativo && s.opcaoAtiva]}
+                >
+                  <MaterialCommunityIcons
+                    name={ativo ? "radiobox-marked" : "radiobox-blank"}
+                    size={22}
+                    color={ativo ? colors.green : colors.muted}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.opcaoTitle}>{e.nome}</Text>
+                    <Text style={s.opcaoSub} numberOfLines={1}>
+                      {e.distancia} · {e.endereco}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View
+            style={{ marginTop: 28, opacity: salvando ? 0.6 : 1 }}
+            pointerEvents={salvando ? "none" : "auto"}
+          >
+            <Button
+              title={salvando ? "Salvando..." : "Confirmar descarte"}
+              color={colors.green}
+              onPress={confirmar}
+              icon={
+                <MaterialCommunityIcons
+                  name="check-circle-outline"
+                  size={20}
+                  color={colors.black}
+                />
+              }
+            />
+          </View>
+        </ScrollView>
+      )}
     </Screen>
   );
 }
@@ -178,7 +234,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: MARGEM,
     paddingTop: 8,
     paddingBottom: 10,
   },
@@ -225,4 +281,21 @@ const s = StyleSheet.create({
   opcaoAtiva: { borderColor: colors.green },
   opcaoTitle: { fontFamily: fonts.medium, fontSize: 15, color: colors.black },
   opcaoSub: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  errorText: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    textAlign: "center",
+    color: colors.black,
+  },
+  errorButtonWrapper: {
+    marginTop: 8,
+    width: "100%",
+  },
 });

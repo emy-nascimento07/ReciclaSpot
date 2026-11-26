@@ -189,6 +189,27 @@ export function PontoCard({ ponto, onPress }: { ponto: PontoColetaComDistancia; 
   );
 }
 
+/** Estado visual de erro de rede com botão de nova tentativa. */
+export function ErrorState({
+  onRetry,
+  message = 'Erro ao carregar dados. Verifique sua conexão',
+  buttonColor = colors.greenDark,
+}: {
+  onRetry: () => void;
+  message?: string;
+  buttonColor?: string;
+}) {
+  return (
+    <View style={styles.errorContainer}>
+      <MaterialCommunityIcons name="wifi-off" size={48} color={colors.muted} />
+      <Text style={styles.errorText}>{message}</Text>
+      <View style={styles.errorButtonWrapper}>
+        <Button title="Tentar Novamente" color={buttonColor} onPress={onRetry} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.white, overflow: 'hidden' },
   arc: { position: 'absolute', borderRadius: 9999, borderWidth: 34, borderColor: colors.bgArc },
@@ -239,4 +260,21 @@ const styles = StyleSheet.create({
     ...shadow,
   },
   catLabel: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16, textAlign: 'center', color: colors.text },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  errorText: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    textAlign: 'center',
+    color: colors.black,
+  },
+  errorButtonWrapper: {
+    marginTop: 8,
+    width: '100%',
+  },
 });

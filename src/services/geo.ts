@@ -26,4 +26,4 @@ export function transladar(ponto: Coords, origemAntiga: Coords, origemNova: Coor
   };
 }
 
-export const formatarKm = (km: number) => `${km.toFixed(1)} Km`;
+export { formatarKm } from '../utils/formatters';
